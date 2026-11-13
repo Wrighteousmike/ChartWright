@@ -5,8 +5,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from chordpro_maker.readers import convert_file
-from chordpro_maker.sheetmusic import find_staves, decode_chord
+from chartwright.readers import convert_file
+from chartwright.sheetmusic import find_staves, decode_chord
 import fitz
 
 S = ROOT / "tests" / "samples"

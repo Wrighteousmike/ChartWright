@@ -5,7 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import fitz
-from chordpro_maker.chart import parse, original_key, transpose_chord, render_pdf
+from chartwright.chart import parse, original_key, transpose_chord, render_pdf
 
 text = (ROOT / "tests/samples/title-clear.expected.cho").read_text()
 ok = True

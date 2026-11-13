@@ -292,7 +292,7 @@ def render_pdf(text: str, key: str = "", capo: int = 0, columns: int = 1, size: 
         for i in range(pages):
             pg = doc[i]
             pg.insert_text((_PAGE_W - _MARGIN - 30, _PAGE_H - _MARGIN + 6), f"{i + 1} / {pages}", fontname="helv", fontsize=8, color=(0.5, 0.5, 0.5))
-    doc.set_metadata({"title": title_txt, "producer": "ChordPro Maker"})
+    doc.set_metadata({"title": title_txt, "producer": "ChartWright"})
     data = doc.tobytes(garbage=3, deflate=True)
     info = {"pages": pages, "original": key_name(*orig) if orig else "", "options": key_options(orig),
             "key": sounding, "shapes": shapes, "title": title_txt}

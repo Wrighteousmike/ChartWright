@@ -24,7 +24,7 @@ LAST_PING: list = [None]                                  # time of the page's l
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "ChordProMaker/1.0"
+    server_version = "ChartWright/1.0"
 
     def log_message(self, *a):  # quiet
         pass
@@ -140,7 +140,7 @@ def serve(port: int = 8791, open_browser: bool = True, auto_quit: bool = False):
     if port != 8791 and port != 0:
         print(f"(port busy, using {port} instead)", flush=True)
     url = f"http://127.0.0.1:{port}/"
-    print(f"ChordPro Maker running at {url}  (Ctrl+C to stop)", flush=True)
+    print(f"ChartWright running at {url}  (Ctrl+C to stop)", flush=True)
     RUN.mkdir(exist_ok=True)
     (RUN / "port").write_text(str(port))
     from .spell import available as spell_ok, get_speller

@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from chordpro_maker.keys import check_groups, best_key, parse_chord, key_name
+from chartwright.keys import check_groups, best_key, parse_chord, key_name
 
 text = (ROOT / "tests/samples/title-clear.expected.cho").read_text()
 groups, cur = [], []
@@ -48,8 +48,8 @@ check("repeated borrowed chord (Bb in C) is not nagged", not check_groups(many, 
 check("too few chords -> stays quiet", not any(check_groups([["C", "Q"]], "C")))
 
 # end to end through the converter: chord-over-lyric text with 'Am' misread as 'A' in Verse 1
-from chordpro_maker.convert import lines_to_chordpro
-from chordpro_maker.readers import _text_to_lines
+from chartwright.convert import lines_to_chordpro
+from chartwright.readers import _text_to_lines
 sheet = (ROOT / "tests/samples/title-clear.chordsheet.txt").read_text()
 bad_sheet = re.sub(r"\bAm(\s+Dm7)", lambda m: "A " + m.group(1), sheet, count=1)   # first Am (Verse 1) -> A
 assert bad_sheet != sheet

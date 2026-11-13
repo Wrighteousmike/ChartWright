@@ -3,9 +3,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from chordpro_maker.lyricfix import correct_lyric, correct_plain
-from chordpro_maker.spell import get_speller
-from chordpro_maker.convert import Ch, Line
+from chartwright.lyricfix import correct_lyric, correct_plain
+from chartwright.spell import get_speller
+from chartwright.convert import Ch, Line
 
 sp = get_speller()
 CASES = [   # (input, expected output after automatic fixes)

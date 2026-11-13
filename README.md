@@ -1,4 +1,4 @@
-# ChartWright (ChordPro Maker)
+# ChartWright
 
 Turns a chord chart (PDF, scan/photo, DOCX or text) into a ChordPro `.cho` file. For PDFs you can drag a box
 around just the part of the chart you want.
@@ -8,16 +8,16 @@ to other projects; uploads are kept in `.work/` and deleted when the server stop
 
 ## Run
 
-**Double-click `ChordPro Maker.app`** (in this folder; drag it to the Dock if you like). It starts the local server
+**Double-click `ChartWright.app`** (in this folder; drag it to the Dock if you like). It starts the local server
 quietly, opens your browser, and reopens the same page if it is already running. The server quits by itself a couple
-of minutes after you close the tab. If anything misbehaves, double-click `Start ChordPro Maker.command` instead
+of minutes after you close the tab. If anything misbehaves, double-click `Start ChartWright.command` instead
 (same thing in a visible Terminal window), or look in `.run/server.log`. Keep the app inside the project folder; if
 the folder is moved, the app rebuilds its private Python environment on first launch (needs internet once).
 
 From a terminal:
 
     cd path/to/ChartWright
-    .venv/bin/python -m chordpro_maker            # opens http://127.0.0.1:8791 (next free port if busy)
+    .venv/bin/python -m chartwright            # opens http://127.0.0.1:8791 (next free port if busy)
 
 Drop a file on the page. For a PDF, drag one or more boxes on the page image (boxes can span pages and
 are combined in order), press **Convert**, edit the text if needed, then **Copy** or **Save .cho**.
@@ -25,8 +25,8 @@ With no boxes the whole document is converted.
 
 Command line:
 
-    .venv/bin/python -m chordpro_maker convert chart.pdf -o song.cho
-    .venv/bin/python -m chordpro_maker convert chart.pdf --page 1 --rect 300,75,590,400
+    .venv/bin/python -m chartwright convert chart.pdf -o song.cho
+    .venv/bin/python -m chartwright convert chart.pdf --page 1 --rect 300,75,590,400
 
 Setup from scratch: `python3 -m venv .venv && .venv/bin/pip install -r requirements.txt`
 
@@ -102,12 +102,12 @@ Next to the ChordPro text there is a **Chord chart preview** tab (works on conve
 - **Capo**: 0-11. The key you pick is the *sounding* key; the printed shapes drop by the capo number and the header says
   e.g. `Key: G   Capo: 2 (play shapes in F)`. A `{capo}` directive in the text is ignored; the Capo box decides.
 - **Columns**: 1 or 2. **Size**: small / medium / large (A4).
-- **Export PDF** downloads exactly what the preview shows (the preview *is* the PDF, rendered by `chordpro_maker/chart.py`).
+- **Export PDF** downloads exactly what the preview shows (the preview *is* the PDF, rendered by `chartwright/chart.py`).
 
 Supported ChordPro: `{title}`, `{subtitle}`/`{artist}`/`{author}`, `{key}`, `{comment}`, `{start_of_verse|chorus|bridge}`
 (and short forms), `{copyright}`, `#` comments. Others are ignored. Test: `.venv/bin/python tests/test_chart.py`.
 
-## Pipeline (chordpro_maker/)
+## Pipeline (chartwright/)
 
 - `ocr.py` – scan preparation (deskew/contrast), RapidOCR, multi-pass merge into the same char format as the PDF reader
 - `sheetmusic.py` – staff detection, chord-glyph decoding, chord→syllable pairing per verse
@@ -132,3 +132,12 @@ deliberately degraded scan (`title-clear.scan.pdf` / `.jpg`), with and without a
 - Runs of spaces inside split syllables (`ski  [G]es`) can't be recovered from a PDF; output uses one space.
 - Section headings are written as `{comment: Verse 1}` (matching your sample), not `start_of_verse`.
 - Proportional-font DOCX/TXT charts may misplace chords by a character; the text box lets you fix it.
+
+## Licence
+
+ChartWright is free software under the **GNU Affero General Public License v3.0** (see `LICENSE`). You can use, share and
+modify it; if you distribute a modified version, or run one as a network service, you must make your source available
+under the same licence. It builds on PyMuPDF (AGPL), RapidOCR/ONNX Runtime, SymSpell, python-docx, NumPy and Pillow, each
+under its own licence.
+
+Copyright (C) 2026 Michael Wright.

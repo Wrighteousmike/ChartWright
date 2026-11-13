@@ -6,7 +6,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from chordpro_maker.readers import convert_file, text_to_chordpro
+from chartwright.readers import convert_file, text_to_chordpro
 
 S = ROOT / "tests" / "samples"
 norm = lambda t: [re.sub(r"\s+", " ", l).strip() for l in t.strip().splitlines()]

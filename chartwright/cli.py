@@ -8,7 +8,7 @@ from .readers import convert_file
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(prog="chordpro_maker",
+    ap = argparse.ArgumentParser(prog="chartwright",
                                  description="Convert a chord chart (PDF/DOCX/text) to ChordPro.")
     sub = ap.add_subparsers(dest="cmd")
     cv = sub.add_parser("convert", help="convert a file on the command line")
