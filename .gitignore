@@ -8,3 +8,7 @@ __pycache__/
 *.app/
 # copyrighted sheet-music sample: keep local only
 tests/samples/risen-conqueror.*
+build/
+*.spec.bak
+release/
+smoke.cho

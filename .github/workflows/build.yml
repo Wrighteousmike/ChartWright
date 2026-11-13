@@ -1,0 +1,58 @@
+name: Build apps
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: macos-latest,     name: macOS-AppleSilicon }
+          - { os: macos-15-intel,   name: macOS-Intel }
+          - { os: windows-latest,   name: Windows }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install
+        run: python -m pip install -r requirements-build.txt
+      - name: Tests
+        shell: bash
+        run: for t in test_sample test_spell test_keys test_sheet test_chart; do python tests/$t.py; done
+      - name: Build
+        run: pyinstaller packaging/chartwright.spec --noconfirm --distpath build/dist --workpath build/work
+      - name: Smoke test the built app (PDF -> ChordPro)
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ]; then EXE="build/dist/ChartWright.app/Contents/MacOS/ChartWright"; else EXE="build/dist/ChartWright/ChartWright.exe"; fi
+          "$EXE" convert tests/samples/title-clear.pdf -o smoke.cho
+          grep -q "{title: When I can read my title clear}" smoke.cho
+          grep -q "\[Am\]" smoke.cho
+      - name: Zip
+        shell: bash
+        run: |
+          mkdir -p release
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            ditto -c -k --keepParent build/dist/ChartWright.app "release/ChartWright-${{ matrix.name }}.zip"
+          else
+            powershell -Command "Compress-Archive -Path build/dist/ChartWright -DestinationPath release/ChartWright-${{ matrix.name }}.zip"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ChartWright-${{ matrix.name }}
+          path: release/*.zip
+      - name: Attach to the GitHub release (tags only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.zip
+          generate_release_notes: true

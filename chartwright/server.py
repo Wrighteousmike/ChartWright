@@ -12,14 +12,13 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .ocr import available as ocr_available
+from .paths import RUN, WORK
 from .readers import IMAGE_EXTS, ScannedPdfError, convert_file, pdf_page_count
 
 STATIC = Path(__file__).parent / "static"
 # uploads live inside the project folder, not in a system temp dir
-WORK = Path(__file__).resolve().parent.parent / ".work"
 DOCS: dict[str, Path] = {}
 MAX_UPLOAD = 100 * 1024 * 1024
-RUN = Path(__file__).resolve().parent.parent / ".run"      # port file + log for the app launcher
 LAST_PING: list = [None]                                  # time of the page's last heartbeat
 
 
@@ -76,7 +75,7 @@ class Handler(BaseHTTPRequestHandler):
                 name = Path(q.get("name", "upload")).name
                 data = self._body()
                 doc_id = uuid.uuid4().hex[:12]
-                WORK.mkdir(exist_ok=True)
+                WORK.mkdir(parents=True, exist_ok=True)
                 path = WORK / f"{doc_id}-{name}"
                 path.write_bytes(data)
                 DOCS[doc_id] = path
@@ -134,14 +133,32 @@ def _bind(port: int) -> ThreadingHTTPServer:
     raise OSError(f"No free port found in {port}-{port + 29}")
 
 
+def running_url() -> str | None:
+    """URL of a ChartWright server that is already running (second launch of the app), else None."""
+    import urllib.request
+    try:
+        p = (RUN / "port").read_text().strip()
+        with urllib.request.urlopen(f"http://127.0.0.1:{p}/", timeout=2) as r:
+            if b"<title>ChartWright" in r.read(2048):
+                return f"http://127.0.0.1:{p}/"
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def serve(port: int = 8791, open_browser: bool = True, auto_quit: bool = False):
+    if open_browser and auto_quit:             # app launch: reuse a running copy instead of starting a second
+        url = running_url()
+        if url:
+            webbrowser.open(url)
+            return
     srv = _bind(port)
     port = srv.server_address[1]
     if port != 8791 and port != 0:
         print(f"(port busy, using {port} instead)", flush=True)
     url = f"http://127.0.0.1:{port}/"
     print(f"ChartWright running at {url}  (Ctrl+C to stop)", flush=True)
-    RUN.mkdir(exist_ok=True)
+    RUN.mkdir(parents=True, exist_ok=True)
     (RUN / "port").write_text(str(port))
     from .spell import available as spell_ok, get_speller
     if spell_ok():                       # warm the dictionary so the first scan isn't slow

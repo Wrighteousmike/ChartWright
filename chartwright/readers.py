@@ -235,6 +235,9 @@ def _docx_text(path: Path) -> str:
 
 
 def _textutil(path: Path) -> str:
+    import shutil
+    if not shutil.which("textutil"):
+        raise ValueError(f"{path.suffix} files can only be read on a Mac. Save it as .docx or .txt and open that instead.")
     with tempfile.TemporaryDirectory() as tmp:
         dst = Path(tmp) / "out.txt"
         subprocess.run(["textutil", "-convert", "txt", "-output", str(dst), str(path)],

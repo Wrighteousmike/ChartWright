@@ -15,7 +15,7 @@ from collections import Counter
 from pathlib import Path
 from typing import Optional
 
-DATA = Path(__file__).resolve().parent.parent / "data"
+from .paths import DATA, USER_WORDS
 MIN_COUNT = 20_000               # a dictionary entry must be at least this common to be "known"
 
 # 1- and 2-letter English words we accept (the big list is full of junk at this length)
@@ -43,7 +43,7 @@ class Speller:
         self._sym.load_dictionary(str(base), 0, 1)
         self.extra: dict[str, int] = {}
         self._load_extra(DATA / "extra_words.txt")
-        self._load_extra(DATA / "user_words.txt")
+        self._load_extra(USER_WORDS)
         self.local: set[str] = set()          # words seen repeatedly in the document being processed
 
     # -- vocabulary
@@ -63,7 +63,8 @@ class Speller:
         w = word.strip().lower()
         if not w or not w.isalpha():
             return
-        with open(DATA / "user_words.txt", "a", encoding="utf-8") as f:
+        USER_WORDS.parent.mkdir(parents=True, exist_ok=True)
+        with open(USER_WORDS, "a", encoding="utf-8") as f:
             f.write(w + "\n")
         self.extra[w] = 5_000_000
         self._sym.create_dictionary_entry(w, 5_000_000)

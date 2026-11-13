@@ -41,6 +41,28 @@ Setup from scratch: `python3 -m venv .venv && .venv/bin/pip install -r requireme
 | .txt .md .crd .pro … | Chord-over-lyrics; files already in ChordPro are passed through untouched |
 | .rtf .odt .doc .html | Converted to text with macOS `textutil`, then as above |
 
+## Download (no Python needed)
+
+Grab the zip for your system from the repository's **Releases** page: *macOS-AppleSilicon* (M1 and newer), *macOS-Intel*,
+or *Windows*. Unzip and double-click **ChartWright**. It starts quietly, opens your browser, and quits by itself a couple of
+minutes after you close the tab. Nothing is uploaded anywhere: everything, including OCR, runs on your computer.
+
+The apps are not code-signed, so the first launch shows a warning:
+- **macOS:** "can't be opened because Apple cannot check it": right-click the app, choose **Open**, then **Open** again
+  (or System Settings, Privacy & Security, **Open Anyway**). You only do this once.
+- **Windows:** SmartScreen "Windows protected your PC": click **More info**, then **Run anyway**.
+
+Your own dictionary words are kept in `~/Library/Application Support/ChartWright` (macOS) or `%APPDATA%\ChartWright` (Windows).
+Old `.doc`, `.rtf` and `.odt` files can only be read on a Mac; save them as `.docx` or `.txt` elsewhere.
+
+### Building the apps yourself
+
+    pip install -r requirements-build.txt
+    pyinstaller packaging/chartwright.spec --noconfirm --distpath build/dist --workpath build/work
+
+The GitHub Action in `.github/workflows/build.yml` runs the tests and builds all three versions; pushing a tag such as
+`v1.0.0` attaches the zips to a release.
+
 ## Sheet music
 
 A PDF exported from notation software has a real text layer plus vector staff lines, so no music recognition is
