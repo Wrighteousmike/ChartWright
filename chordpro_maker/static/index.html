@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChordPro Maker</title>
+<style>
+  :root { --bg:#f6f4ef; --panel:#fff; --ink:#1d1b17; --muted:#6b675e; --line:#ddd8cc; --accent:#8a3b12; --sel:rgba(138,59,18,.18); }
+  @media (prefers-color-scheme: dark) { :root { --bg:#17150f; --panel:#201d16; --ink:#efe9da; --muted:#9b958a; --line:#3a352b; --accent:#e08a52; --sel:rgba(224,138,82,.22); } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, sans-serif; }
+  header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:16px; align-items:baseline; flex-wrap:wrap; }
+  h1 { font-size:18px; margin:0; letter-spacing:.2px; }
+  header span { color:var(--muted); font-size:13px; }
+  main { display:grid; grid-template-columns: minmax(0,1.1fr) minmax(0,1fr); gap:16px; padding:16px 20px; }
+  @media (max-width:860px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; min-height:200px; }
+  .bar { display:flex; gap:8px; align-items:center; padding:8px 10px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  .bar .sp { flex:1; }
+  button { font:inherit; padding:6px 12px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button:disabled { opacity:.45; cursor:default; }
+  #drop { margin:14px; padding:46px 20px; text-align:center; border:2px dashed var(--line); border-radius:8px; color:var(--muted); }
+  #drop.over { border-color:var(--accent); color:var(--accent); background:var(--sel); }
+  #stage { position:relative; margin:10px auto; width:fit-content; max-width:100%; line-height:0; touch-action:none; }
+  #stage img { max-width:100%; height:auto; display:block; user-select:none; -webkit-user-drag:none; }
+  #stage .box { position:absolute; border:2px solid var(--accent); background:var(--sel); pointer-events:none; }
+  #stage .box b { position:absolute; top:-1px; left:-1px; background:var(--accent); color:#fff; font:600 11px/1 system-ui; padding:3px 5px; }
+  #stage.draw { cursor:crosshair; }
+  textarea { width:100%; height:calc(100vh - 260px); min-height:320px; border:0; resize:vertical; padding:12px; background:transparent; color:var(--ink);
+             font:13.5px/1.5 ui-monospace, Menlo, monospace; outline:none; tab-size:4; }
+  #msg { padding:6px 12px; font-size:13px; color:var(--muted); min-height:30px; }
+  #msg.err { color:#c0392b; }
+  #review { border-top:1px solid var(--line); max-height:34vh; overflow:auto; }
+  #review h3 { margin:0; padding:8px 12px; font-size:13px; position:sticky; top:0; background:var(--panel); border-bottom:1px solid var(--line); }
+  #review h3 small { color:var(--muted); font-weight:400; }
+  .rv { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:6px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  .rv.done { opacity:.45; }
+  .rv .tag { font-size:11px; padding:1px 6px; border-radius:10px; border:1px solid var(--line); color:var(--muted); }
+  .rv .tag.suggest { border-color:var(--accent); color:var(--accent); }
+  .rv code { font:12.5px ui-monospace, Menlo, monospace; cursor:pointer; text-decoration:underline dotted; }
+  .rv button { padding:2px 8px; font-size:12px; }
+  .tabs { display:flex; gap:2px; padding:6px 10px 0; border-bottom:1px solid var(--line); }
+  .tabs button { border-radius:6px 6px 0 0; border-bottom:0; background:transparent; color:var(--muted); }
+  .tabs button.on { background:var(--bg); color:var(--ink); font-weight:600; }
+  #chart .bar label { font-size:13px; color:var(--muted); }
+  #chart select { font:inherit; padding:5px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  #pages { padding:14px; background:var(--bg); display:flex; flex-direction:column; align-items:center; gap:14px; max-height:calc(100vh - 250px); overflow:auto; }
+  #pages img { width:100%; max-width:640px; height:auto; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.25); }
+  .hint { color:var(--muted); font-size:13px; padding:0 14px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>ChordPro Maker</h1>
+  <span>Drop a chord chart (PDF, scan/photo, DOCX, TXT…). Drag a box over the part you want, or convert the whole page.</span>
+</header>
+<main>
+  <section class="panel" id="left">
+    <div class="bar">
+      <button id="open">Open file…</button>
+      <input type="file" id="file" hidden accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.gif,.webp,.docx,.txt,.md,.rtf,.odt,.doc,.html,.cho,.crd,.chordpro,.pro">
+      <span id="name" style="color:var(--muted)"></span>
+      <span class="sp"></span>
+      <button id="prev" disabled>◀</button><span id="pg">–</span><button id="next" disabled>▶</button>
+    </div>
+    <div id="drop">Drop a file here<br><small>or click “Open file…”</small></div>
+    <div id="viewer" hidden>
+      <div class="hint">Drag on the page to select a region. Add several boxes (even across pages); they are combined in order. With no boxes, the whole document is used.</div>
+      <div id="stage" class="draw"><img id="img" alt="PDF page"></div>
+    </div>
+  </section>
+  <section class="panel">
+    <div class="bar">
+      <button class="primary" id="convert" disabled>Convert</button>
+      <label style="font-size:13px;color:var(--muted)" title="Auto detects sheet music (staves with chord symbols and lyrics) vs. a chord chart.">
+        Layout
+        <select id="layout" style="font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
+          <option value="auto">Auto</option><option value="chart">Chord chart</option><option value="sheet">Sheet music</option>
+        </select></label>
+      <label style="font-size:13px;color:var(--muted)" title="Auto: use the file's own text, and OCR only when a page or box has none. Always OCR: ignore any text layer (use for badly-embedded PDFs).">
+        Text recognition
+        <select id="ocr" style="font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
+          <option value="auto">Auto (OCR scans)</option><option value="force">Always OCR</option><option value="off">Off</option>
+        </select></label>
+      <button id="clear" disabled>Clear boxes</button>
+      <button id="undo" disabled>Undo box</button>
+      <span class="sp"></span>
+      <button id="copy" disabled>Copy</button>
+      <button id="save" disabled>Save .cho</button>
+    </div>
+    <div class="tabs"><button id="tabText" class="on">ChordPro text</button><button id="tabChart">Chord chart preview</button></div>
+    <div id="msg">Nothing loaded.</div>
+    <div id="chart" hidden>
+      <div class="bar">
+        <label>Key <select id="ckey"><option value="">Original</option></select></label>
+        <label>Capo <select id="ccapo"></select></label>
+        <label>Columns <select id="ccols"><option value="1">1</option><option value="2">2</option></select></label>
+        <label>Size <select id="csize"><option value="small">Small</option><option value="medium" selected>Medium</option><option value="large">Large</option></select></label>
+        <span class="sp"></span>
+        <button class="primary" id="pdf" disabled>Export PDF</button>
+      </div>
+      <div id="cinfo" class="hint" style="padding-top:8px"></div>
+      <div id="pages"><span class="hint">Convert or paste some ChordPro text first.</span></div>
+    </div>
+    <textarea id="out" spellcheck="false" placeholder="ChordPro output appears here — you can edit it before saving."></textarea>
+    <div id="review" hidden></div>
+  </section>
+</main>
+<script>
+const $ = id => document.getElementById(id);
+let doc = null, page = 0, ZOOM = 2, boxes = [];   // boxes: {page, rect:[x0,y0,x1,y1] in PDF points}
+
+const msg = (t, err) => { $('msg').textContent = t; $('msg').className = err ? 'err' : ''; };
+
+async function openFile(f) {
+  msg('Reading ' + f.name + '…');
+  const r = await fetch('/api/open?name=' + encodeURIComponent(f.name), { method: 'POST', body: f });
+  const j = await r.json();
+  if (!r.ok) return msg(j.error, true);
+  doc = j; page = 0; boxes = [];
+  $('name').textContent = j.name;
+  $('drop').hidden = j.kind === 'pdf' ? true : false;
+  $('viewer').hidden = j.kind !== 'pdf';
+  $('convert').disabled = false;
+  if (j.kind === 'pdf') { showPage(); msg('Select a region, or press Convert for the whole PDF.'); }
+  else { setOut(j.chordpro); msg('Converted ' + j.name + '.'); $('drop').hidden = false; }
+  refresh();
+}
+
+function showPage() {
+  $('img').src = `/api/page?id=${doc.id}&n=${page}&zoom=${ZOOM}`;
+  $('pg').textContent = `${page + 1} / ${doc.pages}`;
+  $('prev').disabled = page === 0; $('next').disabled = page >= doc.pages - 1;
+  $('img').onload = drawBoxes;
+}
+
+function setOut(t) { showReview([]); $('out').value = t; $('copy').disabled = $('save').disabled = !t; if (typeof tab !== 'undefined' && tab === 'chart') preview(); }
+function refresh() {
+  $('clear').disabled = $('undo').disabled = !boxes.length;
+  $('convert').textContent = boxes.length ? `Convert ${boxes.length} selection${boxes.length > 1 ? 's' : ''}` : 'Convert';
+  drawBoxes();
+}
+
+// scale between displayed pixels and PDF points
+function scale() { const i = $('img'); return i.naturalWidth / ZOOM / i.clientWidth; }
+
+function drawBoxes() {
+  document.querySelectorAll('#stage .box').forEach(e => e.remove());
+  if (!doc || doc.kind !== 'pdf') return;
+  const s = scale();
+  boxes.forEach((b, n) => {
+    if (b.page !== page) return;
+    addBox(b.rect.map(v => v / s), 'box').firstChild.textContent = n + 1;
+  });
+}
+function addBox([x0, y0, x1, y1]) {
+  const d = document.createElement('div'); d.className = 'box';
+  Object.assign(d.style, { left: x0 + 'px', top: y0 + 'px', width: (x1 - x0) + 'px', height: (y1 - y0) + 'px' });
+  d.innerHTML = '<b></b>'; $('stage').appendChild(d); return d;
+}
+
+// drag to select
+let start = null, live = null;
+$('stage').addEventListener('pointerdown', e => {
+  if (e.target !== $('img')) return;
+  const r = $('img').getBoundingClientRect();
+  start = [e.clientX - r.left, e.clientY - r.top];
+  live = addBox([start[0], start[1], start[0], start[1]]);
+  $('stage').setPointerCapture(e.pointerId); e.preventDefault();
+});
+$('stage').addEventListener('pointermove', e => {
+  if (!start) return;
+  const r = $('img').getBoundingClientRect();
+  const x = Math.min(Math.max(e.clientX - r.left, 0), r.width), y = Math.min(Math.max(e.clientY - r.top, 0), r.height);
+  const [a, b, c, d] = [Math.min(start[0], x), Math.min(start[1], y), Math.max(start[0], x), Math.max(start[1], y)];
+  Object.assign(live.style, { left: a + 'px', top: b + 'px', width: (c - a) + 'px', height: (d - b) + 'px' });
+  live._r = [a, b, c, d];
+});
+$('stage').addEventListener('pointerup', () => {
+  if (!start) return;
+  const r = live && live._r; start = null;
+  if (live) live.remove(); live = null;
+  if (r && r[2] - r[0] > 8 && r[3] - r[1] > 8) {
+    const s = scale();
+    boxes.push({ page, rect: r.map(v => v * s) });
+    refresh();
+  }
+});
+
+$('prev').onclick = () => { page--; showPage(); };
+$('next').onclick = () => { page++; showPage(); };
+$('clear').onclick = () => { boxes = []; refresh(); };
+$('undo').onclick = () => { boxes.pop(); refresh(); };
+
+$('convert').onclick = async () => {
+  msg($('ocr').value === 'off' ? 'Converting…' : 'Converting… (scans are read with OCR and can take a few seconds per page)');
+  const r = await fetch('/api/convert', { method: 'POST', body: JSON.stringify({ id: doc.id, selections: boxes, ocr: $('ocr').value, layout: $('layout').value }) });
+  const j = await r.json();
+  if (!r.ok) { msg(j.error, true); return; }
+  setTab('text'); setOut(j.chordpro); showReview(j.review || []);
+  msg('Done. Review/edit the text, then Copy or Save.' + ((j.review || []).length ? ' Check the Review list below for OCR fixes and suggestions.' : ''));
+};
+// ---- chord chart preview / PDF export (rendered on the server: the preview is the PDF)
+for (let i = 0; i <= 11; i++) { const o = document.createElement('option'); o.value = i; o.textContent = i ? i : 'None'; $('ccapo').appendChild(o); }
+let tab = 'text', pvTimer = null, pvSeq = 0;
+const chartOpts = () => ({ text: $('out').value, key: $('ckey').value, capo: +$('ccapo').value, columns: +$('ccols').value,
+                          size: $('csize').value, title: (doc?.name || '').replace(/\.[^.]+$/, '') });
+function setTab(t) {
+  tab = t;
+  $('tabText').classList.toggle('on', t === 'text'); $('tabChart').classList.toggle('on', t === 'chart');
+  $('chart').hidden = t !== 'chart'; $('out').hidden = t !== 'text';
+  if (t === 'chart') { $('review').hidden = true; preview(); } else { $('review').hidden = !$('review').children.length; }
+}
+async function preview() {
+  const o = chartOpts(), my = ++pvSeq;
+  $('pdf').disabled = !o.text.trim();
+  if (!o.text.trim()) { $('pages').innerHTML = '<span class="hint">Convert or paste some ChordPro text first.</span>'; $('cinfo').textContent = ''; return; }
+  const r = await fetch('/api/preview', { method: 'POST', body: JSON.stringify(o) });
+  const j = await r.json();
+  if (my !== pvSeq) return;
+  if (!r.ok) { $('cinfo').textContent = j.error; return; }
+  const sel = $('ckey'), cur = sel.value;
+  sel.innerHTML = '<option value="">Original' + (j.original ? ' (' + j.original + ')' : '') + '</option>' +
+    (j.options || []).map(k => `<option value="${k}">${k}</option>`).join('');
+  sel.value = (j.options || []).includes(cur) ? cur : ''; sel.disabled = !j.options.length;
+  $('cinfo').textContent = j.options.length
+    ? `Original key ${j.original}. Showing key ${j.key}` + (+$('ccapo').value ? `, capo ${$('ccapo').value} — chord shapes are in ${j.shapes}.` : '.') + (j.pages > 1 ? `  ${j.pages} pages.` : '')
+    : 'No chords found, so there is nothing to transpose.';
+  $('pages').innerHTML = j.images.map(b => `<img alt="chart page" src="data:image/png;base64,${b}">`).join('');
+}
+const schedulePreview = () => { clearTimeout(pvTimer); pvTimer = setTimeout(() => tab === 'chart' && preview(), 250); };
+['ckey', 'ccapo', 'ccols', 'csize'].forEach(id => $(id).onchange = preview);
+$('out').addEventListener('input', schedulePreview);
+$('tabText').onclick = () => setTab('text'); $('tabChart').onclick = () => setTab('chart');
+$('pdf').onclick = async () => {
+  const o = chartOpts();
+  const r = await fetch('/api/pdf', { method: 'POST', body: JSON.stringify(o) });
+  if (!r.ok) return msg((await r.json()).error, true);
+  const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob());
+  a.download = (o.title || 'chord chart') + (o.key ? ' [' + o.key + (o.capo ? ' capo ' + o.capo : '') + ']' : '') + '.pdf'; a.click();
+  msg('Chord chart PDF saved.');
+};
+
+// ---- OCR review list: auto-fixes (undo) and dictionary suggestions (apply)
+function lineRange(ta, n) {
+  const lines = ta.value.split('\n'); let a = 0;
+  for (let i = 0; i < n; i++) a += lines[i].length + 1;
+  return [a, a + (lines[n] || '').length];
+}
+function replaceIn(note, from, to) {
+  const ta = $('out'), lines = ta.value.split('\n');
+  const tryLine = i => i != null && lines[i] !== undefined && lines[i].includes(from);
+  let i = tryLine(note.line) ? note.line : lines.findIndex(l => l.includes(from));
+  if (i < 0) return false;
+  lines[i] = lines[i].replace(from, to);
+  ta.value = lines.join('\n'); note.line = i; return true;
+}
+function focusLine(note) {
+  const ta = $('out'); if (note.line == null) return;
+  const [a, b] = lineRange(ta, note.line); ta.focus(); ta.setSelectionRange(a, b);
+  const lh = parseFloat(getComputedStyle(ta).lineHeight) || 20; ta.scrollTop = Math.max(0, note.line * lh - 60);
+}
+function showReview(items) {
+  const box = $('review');
+  box.hidden = !items.length; box.innerHTML = '';
+  if (!items.length) return;
+  const fixes = items.filter(n => n.kind !== 'suggest').length;
+  const h = document.createElement('h3');
+  h.innerHTML = `Review <small>— ${fixes} automatic fix${fixes === 1 ? '' : 'es'}, ${items.length - fixes} to check. Click a word to jump to it.</small>`;
+  box.appendChild(h);
+  items.forEach(n => {
+    const row = document.createElement('div'); row.className = 'rv';
+    const tag = n.kind === 'suggest' ? 'check' : n.kind === 'key' ? 'key?' : n.kind === 'chord' ? 'chord line' : 'fixed';
+    const done = () => { row.classList.add('done'); row.querySelectorAll('button').forEach(b => b.disabled = true); };
+    const jump = document.createElement('code'); jump.textContent = n.kind === 'suggest' || n.kind === 'chord' || n.kind === 'key' ? n.frm : n.frm + ' → ' + n.to;
+    jump.onclick = () => focusLine(n);
+    const t = document.createElement('span'); t.className = 'tag ' + (n.kind === 'suggest' || n.kind === 'key' ? 'suggest' : ''); t.textContent = tag;
+    row.append(t, jump);
+    if (n.kind === 'chord') {
+      const s = document.createElement('span'); s.style.color = 'var(--muted)'; s.textContent = 'unreadable chord dropped from this line — add it by hand if needed'; row.append(s);
+    } else if (n.kind === 'key') {
+      const w = document.createElement('span'); w.style.color = 'var(--muted)'; w.textContent = n.why + ' — maybe a misread?'; row.append(w);
+      (n.suggestions || []).forEach(sg => {
+        const b = document.createElement('button'); b.textContent = sg;
+        b.onclick = () => { if (replaceIn(n, n.frm, sg)) done(); else msg('Could not find ' + n.frm + ' — edited already?', true); };
+        row.append(b);
+      });
+      const keep = document.createElement('button'); keep.textContent = 'Keep'; keep.onclick = done; row.append(keep);
+    } else if (n.kind === 'suggest') {
+      (n.suggestions || []).forEach(sg => {
+        const b = document.createElement('button'); b.textContent = sg;
+        b.onclick = () => { if (replaceIn(n, n.frm, sg)) done(); else msg('Could not find “' + n.frm + '” — edited already?', true); };
+        row.append(b);
+      });
+      const keep = document.createElement('button'); keep.textContent = 'Keep'; keep.onclick = done;
+      const add = document.createElement('button'); add.textContent = 'Add to dictionary';
+      add.onclick = async () => { await fetch('/api/dict/add', { method: 'POST', body: JSON.stringify({ word: n.frm }) }); done(); };
+      row.append(keep, add);
+    } else {
+      const undo = document.createElement('button'); undo.textContent = 'Undo';
+      undo.onclick = () => { if (replaceIn(n, n.to, n.frm)) done(); else msg('Could not find “' + n.to + '” — edited already?', true); };
+      row.append(undo);
+    }
+    box.appendChild(row);
+  });
+}
+
+$('copy').onclick = async () => { await navigator.clipboard.writeText($('out').value); msg('Copied to clipboard.'); };
+$('save').onclick = () => {
+  const base = (doc?.name || 'song').replace(/\.[^.]+$/, '');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([$('out').value], { type: 'text/plain' }));
+  a.download = base + '.cho'; a.click();
+};
+
+$('open').onclick = () => $('file').click();
+$('drop').onclick = () => $('file').click();
+$('file').onchange = e => e.target.files[0] && openFile(e.target.files[0]);
+['dragover', 'dragenter'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('drop').classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => document.addEventListener(t, e => { e.preventDefault(); $('drop').classList.remove('over'); }));
+document.addEventListener('drop', e => e.dataTransfer.files[0] && openFile(e.dataTransfer.files[0]));
+window.addEventListener('resize', drawBoxes);
+// heartbeat: lets the launcher app shut the server down once this tab is closed
+const ping = () => fetch('/api/ping').catch(() => {});
+ping(); setInterval(ping, 10000);
+</script>
+</body>
+</html>

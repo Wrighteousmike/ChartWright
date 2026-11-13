@@ -1,0 +1,10 @@
+.venv/
+.work/
+.run/
+__pycache__/
+*.pyc
+.DS_Store
+# built app bundle (rebuild with tools/build_app.sh)
+*.app/
+# copyrighted sheet-music sample: keep local only
+tests/samples/risen-conqueror.*
