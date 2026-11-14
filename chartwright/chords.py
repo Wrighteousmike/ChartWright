@@ -7,7 +7,8 @@ _ROOT = r"[A-G][#b♯♭]?"
 _QUALITY = (
     r"(?:maj|min|dim|aug|sus|add|m|M|mi|ma|\+|°|ø|-)?"
 )
-_EXT = r"(?:\d{1,2}|sus\d?|add\d{1,2}|maj\d{1,2}|[#b♯♭+\-]\d{1,2}|\([^)\s]*\))*"
+_NUM = r"(?:13|11|10|69|[2-9])"          # real chord numbers only: F21 / C17 are OCR junk
+_EXT = rf"(?:{_NUM}|sus\d?|add{_NUM}|maj{_NUM}|[#b♯♭+\-]{_NUM}|\([^)\s]*\))*"
 CHORD_RE = re.compile(rf"^{_ROOT}{_QUALITY}{_EXT}(?:/{_ROOT})?$")
 # Tokens that may sit on a chord line without being chords themselves.
 NEUTRAL = {"|", "||", "/", "-", "%", "N.C.", "NC", "x2", "x3", "x4", "(x2)", "(x3)", "(x4)", "2x", "3x", "4x"}
@@ -18,6 +19,13 @@ SECTION_RE = re.compile(
     r"pre|v|ch)\s*\d*\s*\]?\s*(\(.*\))?\s*:?$",
     re.I,
 )
+
+
+_BAR = re.compile(r"^[|:]+$")          # | || |: :|| ... bar lines and repeat marks
+
+
+def is_neutral(tok: str) -> bool:
+    return tok in NEUTRAL or bool(_BAR.match(tok))
 
 
 def is_chord(tok: str) -> bool:
@@ -31,7 +39,7 @@ def is_chord_line(tokens: list[str]) -> bool:
     for t in tokens:
         if is_chord(t):
             real += 1
-        elif t not in NEUTRAL:
+        elif not is_neutral(t):
             return False
     return real > 0
 

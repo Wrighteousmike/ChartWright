@@ -64,12 +64,17 @@ def correct_lyric(lyric, chord_line, sp: Speller, notes: list, first_in_line: bo
                     protected.add(side)
                     protected.add(k if side == k + 1 else k + 1)
 
+    # words either side of a lone hyphen are sung syllables ("diso - bedience", "tri - umphant"): never "correct" them
+    for k, w in enumerate(words):
+        if _text(w) in ("-", "–", "—"):
+            protected.update(j for j in (k - 1, k + 1) if 0 <= j < len(words))
+
     # ---- B. per-word: look-alike letters, joined words, unknown words
     out_words: list[list] = []
     for wi, w in enumerate(words):
         t = _text(w)
         m = _WORD.match(t)
-        if not m or wi in protected:
+        if not m or wi in protected or re.search(r"[a-z][A-Z][a-z]", m.group(2) or ""):   # CamelCase = a name (SongSelect)
             out_words.append(w)
             continue
         lead, core, trail = m.groups()

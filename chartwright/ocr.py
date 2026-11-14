@@ -176,6 +176,27 @@ def _recover_chords(img, res, line_infos, scale, origin_x, origin_y):
         out.append((chars, min(conf, 0.5)))
     return out
 
+def _ink_span(gray, x0, x1, y0, y1):
+    """Left/right edge (pixels) of the dark ink inside a detector box, or None. Detector boxes are padded
+    (more so on blurred or noisy scans); the real glyph edges are what chord alignment needs."""
+    import numpy as np
+    H, W = gray.shape
+    a, b, c, d = max(0, int(x0)), min(W, int(x1) + 1), max(0, int(y0)), min(H, int(y1) + 1)
+    if b - a < 4 or d - c < 4:
+        return None
+    crop = gray[c:d, a:b].astype(np.float32)
+    lo, hi = np.percentile(crop, 3), np.percentile(crop, 60)
+    if hi - lo < 40:
+        return None
+    dark = crop < (lo + hi) / 2
+    cols = dark.sum(axis=0)
+    need = max(1, int(0.12 * (d - c)))
+    idx = np.nonzero(cols >= need)[0]
+    if len(idx) == 0:
+        return None
+    return a + int(idx[0]), a + int(idx[-1]) + 1
+
+
 # ---------------------------------------------------------------- recognition
 def recognise_pixmap(png_bytes: bytes, center_x: float, center_y: float, scale: float):
     """OCR a rendered image. Returns [(chars, confidence)] per text line; chars are tuples in page points.
@@ -188,6 +209,7 @@ def recognise_pixmap(png_bytes: bytes, center_x: float, center_y: float, scale: 
     img = prepare(png_bytes)
     origin_x = center_x - img.width / 2 / scale
     origin_y = center_y - img.height / 2 / scale
+    gray_img = np.asarray(img.convert("L"))
     res = _engine()(np.asarray(img.convert("RGB")), return_word_box=True, return_single_char_box=True)
     if res is None or res.word_results is None:
         return []
@@ -205,6 +227,14 @@ def recognise_pixmap(png_bytes: bytes, center_x: float, center_y: float, scale: 
             xs = [p[0] for p in b]
             ys = [p[1] for p in b]
             boxes.append((t, min(xs), max(xs), min(ys), max(ys)))
+        try:
+            lx0, lx1 = min(b[1] for b in boxes), max(b[2] for b in boxes)
+            span = _ink_span(gray_img, lx0, lx1, min(b[3] for b in boxes), max(b[4] for b in boxes))
+            if span and lx1 > lx0 and 0.5 * (lx1 - lx0) < (span[1] - span[0]) <= (lx1 - lx0) + 1:
+                k = (span[1] - span[0]) / (lx1 - lx0)
+                boxes = [(t, span[0] + (x0 - lx0) * k, span[0] + (x1 - lx0) * k, y0, y1) for t, x0, x1, y0, y1 in boxes]
+        except Exception:  # noqa: BLE001 - trimming is a refinement only
+            pass
         widths = [x1 - x0 for _, x0, x1, _, _ in boxes if x1 > x0]
         mw = statistics.median(widths) if widths else 1.0
         h = statistics.median(y1 - y0 for _, _, _, y0, y1 in boxes)
@@ -282,7 +312,7 @@ def _same_text(a, b) -> bool:
     if min(len(ta), len(tb)) < 6:
         return False
     m = sum(x.size for x in difflib.SequenceMatcher(None, ta, tb, autojunk=False).get_matching_blocks())
-    return m / min(len(ta), len(tb)) > 0.6
+    return m / min(len(ta), len(tb)) > 0.8
 
 
 def _near_same_row(a, b) -> bool:
@@ -303,7 +333,7 @@ def _same_line(a, b):
     return w > 0.4 * min(a[2] - a[0], b[2] - b[0])
 
 
-def ocr_page_chars(page, clip=None, passes=(2600, 1800)):
+def ocr_page_chars(page, clip=None, passes=(2600, 1500)):
     """Render the page (or clip) at a couple of resolutions, OCR each, and union the text lines
     (detection is noisy: a chord missed at one scale is often found at another)."""
     import fitz
@@ -325,4 +355,5 @@ def ocr_page_chars(page, clip=None, passes=(2600, 1800)):
             kept.append((line, bb, conf))
     # restore reading order (top to bottom, left to right) so downstream grouping is stable
     kept.sort(key=lambda t: (round(t[1][1] / 4), t[1][0]))
-    return [c for line, _, _ in kept for c in line]
+    sup = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")      # raised chord numbers (F², Am⁷) -> plain digits
+    return [(c[0].translate(sup),) + tuple(c[1:]) for line, _, _ in kept for c in line]

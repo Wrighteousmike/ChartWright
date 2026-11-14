@@ -10,7 +10,7 @@ import statistics
 from typing import Optional
 from dataclasses import dataclass, field
 
-from .chords import is_chord, is_chord_line, section_label
+from .chords import is_chord, is_chord_line, is_neutral, section_label
 
 
 @dataclass
@@ -63,14 +63,12 @@ def merge_chords(chord_line: Line, lyric: Line, snap: bool = False) -> str:
     trailing: list[str] = []
     for w, tok in zip(chord_line.words, chord_line.tokens):
         cx = w[0].x0
-        if snap:
-            # OCR boxes are padded: trust the centre, back off half the glyph widths to the left edge
-            cx = (w[0].x0 + w[-1].x1) / 2 - 0.28 * chord_line.size * len(tok)
         if snap and lyric.words:
             # OCR char boxes are fuzzy: a chord within ~1 char of a word start belongs to that word start
             cw = statistics.median(c.x1 - c.x0 for c in lch)
-            near = min((lw[0] for lw in lyric.words), key=lambda c: abs(c.x0 - cx))
-            if abs(near.x0 - cx) <= 0.9 * cw:
+            starts = [lw[0] for lw in lyric.words if "".join(c.c for c in lw) not in ("-", "–", "—")]
+            near = min(starts, key=lambda c: abs(c.x0 - cx))     # a lone "-" between syllables is never the target
+            if abs(near.x0 - cx) <= 1.4 * cw:
                 cx = near.x0 + 0.01
         # first char that ends after the chord's left edge (inside it, or the next one after a gap)
         i = next((k for k, c in enumerate(lch) if c.x1 > cx + 1e-6), None)
@@ -100,7 +98,7 @@ _KEY = re.compile(r"^key\s*[-:=]\s*(.+)$", re.I)
 _CAPO = re.compile(r"^capo\s*[-:=]?\s*(\d+)\b.*$", re.I)
 _TEMPO = re.compile(r"^(?:tempo|bpm)\s*[-:=]?\s*(\d+)\b.*$", re.I)
 _TIME = re.compile(r"^time\s*[-:=]\s*(\d+/\d+)$", re.I)
-_FOOTER = re.compile(r"rendered by chordpro|^page \d+( of \d+)?$|^\d+$", re.I)
+_FOOTER = re.compile(r"rendered by chordpro|^page \d+( of \d+)?$|^\d+$|^songsele\w*\W*$|^by ?c+\W?[a-z]*$|^songselebyc\w*", re.I)
 
 
 def _front_matter(texts: list[str]) -> tuple[list[str], list[str]]:
@@ -128,6 +126,8 @@ def _front_matter(texts: list[str]) -> tuple[list[str], list[str]]:
 
 
 # ---------------------------------------------------------------- OCR clean-up
+_SUPER = str.maketrans("⁰¹²³⁴⁵⁶⁷⁸⁹", "0123456789")
+
 def _split_chords(tok: str):
     """'GA' -> ['G','A'];  'Bm7' -> ['Bm7'].  None if it can't be read as chords."""
     tok = tok.replace("♯", "#").replace("♭", "b")
@@ -141,8 +141,25 @@ def _split_chords(tok: str):
     return None
 
 
+def _tidy_chord_token(tok: str) -> str:
+    """Superscript digits -> plain, 'GSUS'/'GsuS' -> 'Gsus', a raised digit read twice ('F22' -> 'F2')."""
+    tok = tok.translate(_SUPER).replace(",", " ").strip()
+    tok = re.sub(r"\(n0", "(no", tok)
+    if re.match(r"^[A-Ga-g][#b]?", tok):
+        tok = re.sub(r"(?i)sus", "sus", tok)
+        tok = re.sub(r"(?i)(?<=[A-Ga-g#b])maj(?=\d|$)", "maj", tok)
+        m = re.match(r"^(.*?[A-Za-z#])(\d)\2$", tok)
+        if m and m.group(2) != "1":
+            tok = m.group(1) + m.group(2)
+    return tok
+
+
 def _read_chord_token(tok: str):
     """_split_chords plus the usual OCR slips: lowercase root (c -> C), raised 7 read as 1 / ? / l."""
+    tok = _tidy_chord_token(tok)
+    if " " in tok:                                   # "Am7,F2" -> two chords
+        parts = [_read_chord_token(t) for t in tok.split()]
+        return [c for p in parts for c in p] if all(parts) else None
     for cand in dict.fromkeys([tok, tok[:1].upper() + tok[1:]]):
         sp = _split_chords(cand)
         if sp:
@@ -173,12 +190,18 @@ def _merge_extensions(line: Line) -> list:
 
 def repair_chord_line(line: Line) -> Line:
     """If an OCR'd line is mostly chords, fix merged chords and drop stray junk tokens."""
-    if is_chord_line(line.tokens) or len(line.words) > 14:
+    if len(line.words) > 14 or (is_chord_line(line.tokens)
+                                and all(_tidy_chord_token(t) == t for t in line.tokens)):
         return line
     pieces, good = [], 0
     for w in _merge_extensions(line):
         tok = "".join(c.c for c in w)
+        if is_neutral(tok):                      # bar line / repeat sign: keep, but it isn't evidence either way
+            pieces.append((w, [tok]))
+            continue
         sp = _read_chord_token(tok)
+        if not sp and tok in ("9", "6") and len(line.words) > 2:   # a bold G is often read as 9 / 6
+            sp = ["G"]
         if sp:
             good += 1
             pieces.append((w, sp))
@@ -208,6 +231,46 @@ def repair_chord_line(line: Line) -> Line:
     return out
 
 
+_HEADINGS = ["verse", "chorus", "pre-chorus", "bridge", "intro", "outro", "interlude", "instrumental",
+             "turnaround", "ending", "refrain", "tag", "coda"]
+
+
+def repair_headings(lines: list) -> list:
+    """OCR garbles short all-caps headings ('VEER SEE' for 'VERSE 3'). Snap them to the nearest known heading;
+    a missing number continues the previous heading of the same name."""
+    import difflib
+    seen: dict = {}
+    out = []
+    for l in lines:
+        t = l.text.strip()
+        letters = [c for c in t if c.isalpha()]
+        if is_chord_line(l.tokens) or not letters or len(t) > 18 or len(l.words) > 3:
+            out.append(l)
+            continue
+        label = section_label(t)
+        if not label and sum(c.isupper() for c in letters) >= 0.8 * len(letters) and len(letters) >= 4:
+            word = re.sub(r"[^a-z]", "", t.lower())
+            best = max(_HEADINGS, key=lambda h: difflib.SequenceMatcher(None, word, h.replace("-", "")).ratio())
+            if difflib.SequenceMatcher(None, word, best.replace("-", "")).ratio() >= 0.6:
+                m = re.search(r"\d+", t)
+                label = best.title() + (f" {m.group()}" if m else "")
+                if not m and best in ("verse", "chorus", "bridge") and best in seen:
+                    label = f"{best.title()} {seen[best] + 1}"
+        if label:
+            m = re.match(r"([A-Za-z-]+)\s*(\d+)?", label)
+            if m and m.group(2):
+                seen[m.group(1).lower()] = int(m.group(2))
+        if label and label != section_label(t) and label.lower() != t.lower():
+            x0, x1 = l.chars[0].x0, l.chars[-1].x1
+            n = len(label)
+            chars = [Ch(c, x0 + (x1 - x0) * k / n, x0 + (x1 - x0) * (k + 1) / n) for k, c in enumerate(label)]
+            nl = Line(chars, l.y, l.size, l.col_start)
+            out.append(nl)
+        else:
+            out.append(l)
+    return out
+
+
 _LOWER_I = re.compile(r"(?<=[a-z])I|I(?=[a-z]{0,1}\b)(?<=[a-z]I)")
 
 
@@ -227,6 +290,7 @@ def lines_to_chordpro(lines: list[Line], ocr: bool = False, notes: Optional[list
     lines = [l for l in lines if l.words and not _FOOTER.search(l.text.strip())]
     if ocr:
         lines = [repair_chord_line(l) for l in lines]
+        lines = repair_headings(lines)
         # noise: lines with fewer than 2 plain letters/digits that aren't chords (e.g. specks read as 日, à)
         lines = [l for l in lines if is_chord_line(l.tokens) or len(re.findall(r"[A-Za-z0-9]", l.text)) >= 2]
     if not lines:
@@ -287,7 +351,7 @@ def lines_to_chordpro(lines: list[Line], ocr: bool = False, notes: Optional[list
                                    y0=l.y, y1=nxt.y, cs=l.col_start, notes=bn + ln))
                 i += 2
             else:
-                blocks.append(dict(kind="song", text=" ".join(f"[{t}]" for t in l.tokens),
+                blocks.append(dict(kind="song", text=" ".join(f"[{t}]" if is_chord(t) else t for t in l.tokens),
                                    y0=l.y, y1=l.y, cs=l.col_start, notes=bn))
                 i += 1
         else:

@@ -27,7 +27,7 @@ jobs:
         run: python -m pip install -r requirements-build.txt
       - name: Tests
         shell: bash
-        run: for t in test_sample test_spell test_keys test_sheet test_chart test_columns test_shift; do python tests/$t.py; done
+        run: for t in test_sample test_spell test_keys test_sheet test_chart test_columns test_shift test_ocr_tokens; do python tests/$t.py; done
       - name: Build
         run: pyinstaller packaging/chartwright.spec --noconfirm --distpath build/dist --workpath build/work
       - name: Smoke test the built app (PDF -> ChordPro)

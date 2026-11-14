@@ -151,16 +151,17 @@ def _page_lines(page, clip: Optional[Rect], ocr: str = "auto", columns: str = "a
     assign = {}
     straddlers = []
     for i, r in enumerate(grows):
-        r_cols = {col_of((c[1] + c[2]) / 2) for c in r}
-        straddle = len(r_cols) > 1 and any(
-            abs((c[1] + c[2]) / 2 - g) <= min_gap / 2 for g in gutters for c in r)
+        # a straddler has a run of text (gaps narrower than a column gap) that crosses a gutter
+        straddle = any(a_ < g < b_ for g in gutters for a_, b_ in runs(r))
         lead = col_of(min(c[1] for c in r))
         for c in r:
             assign[id(c)] = lead if straddle else col_of((c[1] + c[2]) / 2)
         if straddle and gutters:
             straddlers.append((i, r))
     if straddlers:
-        col_ys = [c[3] for r_i, r in enumerate(grows) if r_i not in {i for i, _ in straddlers} for c in r]
+        col_ys = [c[3] for r_i, r in enumerate(grows)
+                  if r_i not in {i for i, _ in straddlers}
+                  and sum(1 for c in r if not c[0].isspace()) >= 3 for c in r]   # a stray speck isn't a column row
         if col_ys:
             top, bot = min(col_ys), max(col_ys)
             for _, r in straddlers:
