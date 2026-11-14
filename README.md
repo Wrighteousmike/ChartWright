@@ -23,6 +23,9 @@ Drop a file on the page. For a PDF, drag one or more boxes on the page image (bo
 are combined in order), press **Convert**, edit the text if needed, then **Copy** or **Save .cho**.
 With no boxes the whole document is converted.
 
+Multi-column pages (e.g. SongSelect exports) are detected automatically. If a page still comes out jumbled, set
+**Page columns** to *1 column* or *2 columns* (CLI: `--columns 1|2`).
+
 Command line:
 
     .venv/bin/python -m chartwright convert chart.pdf -o song.cho

@@ -78,6 +78,11 @@
         <select id="layout" style="font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
           <option value="auto">Auto</option><option value="chart">Chord chart</option><option value="sheet">Sheet music</option>
         </select></label>
+      <label style="font-size:13px;color:var(--muted)" title="Auto finds columns by itself. Pick 1 or 2 if a multi-column page comes out jumbled.">
+        Page columns
+        <select id="pcols" style="font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
+          <option value="auto">Auto</option><option value="1">1 column</option><option value="2">2 columns</option>
+        </select></label>
       <label style="font-size:13px;color:var(--muted)" title="Auto: use the file's own text, and OCR only when a page or box has none. Always OCR: ignore any text layer (use for badly-embedded PDFs).">
         Text recognition
         <select id="ocr" style="font:inherit;padding:5px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink)">
@@ -195,7 +200,7 @@ $('undo').onclick = () => { boxes.pop(); refresh(); };
 
 $('convert').onclick = async () => {
   msg($('ocr').value === 'off' ? 'Converting…' : 'Converting… (scans are read with OCR and can take a few seconds per page)');
-  const r = await fetch('/api/convert', { method: 'POST', body: JSON.stringify({ id: doc.id, selections: boxes, ocr: $('ocr').value, layout: $('layout').value }) });
+  const r = await fetch('/api/convert', { method: 'POST', body: JSON.stringify({ id: doc.id, selections: boxes, ocr: $('ocr').value, layout: $('layout').value, columns: $('pcols').value }) });
   const j = await r.json();
   if (!r.ok) { msg(j.error, true); return; }
   setTab('text'); setOut(j.chordpro); showReview(j.review || []);

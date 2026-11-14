@@ -95,7 +95,8 @@ class Handler(BaseHTTPRequestHandler):
                 layout = req.get("layout", "auto")
                 if layout not in ("auto", "chart", "sheet"):
                     layout = "auto"
-                text = convert_file(DOCS[req["id"]], sel, mode, notes, layout)
+                cols = str(req.get("columns", "auto"))
+                text = convert_file(DOCS[req["id"]], sel, mode, notes, layout, cols if cols in ("1", "2") else "auto")
                 for i, n in enumerate(notes):
                     n["id"] = i
                 return self._json({"chordpro": text, "review": notes})

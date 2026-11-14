@@ -39,8 +39,8 @@ def _drop_footer(chars, size):
     return keep
 
 
-def _page_lines(page, clip: Optional[Rect], ocr: str = "auto") -> tuple[list[Line], bool]:
-    """Returns (lines, used_ocr). ocr: 'auto' | 'force' | 'off'."""
+def _page_lines(page, clip: Optional[Rect], ocr: str = "auto", columns: str = "auto") -> tuple[list[Line], bool]:
+    """Returns (lines, used_ocr). ocr: 'auto' | 'force' | 'off'. columns: 'auto' | '1' | '2'."""
     import fitz
     from . import ocr as ocr_mod
 
@@ -77,48 +77,103 @@ def _page_lines(page, clip: Optional[Rect], ocr: str = "auto") -> tuple[list[Lin
     x_min = min(c[1] for c in chars)
     x_max = max(c[2] for c in chars)
     nb = int(x_max - x_min) + 2
-    dens = [0] * nb
-    for c in chars:
-        if c[0].isspace():
-            continue
-        for k in range(int(c[1] - x_min), int(c[2] - x_min) + 1):
-            dens[k] += 1
     min_gap = max(18, int(2.6 * size))
-    lim = max(1, int(0.08 * max(dens)))
-    gutters, k = [], 0
-    while k < nb:
-        if dens[k] <= lim:
-            j = k
-            while j < nb and dens[j] <= lim:
-                j += 1
-            if j - k >= min_gap and k > 0 and j < nb:
-                gutters.append(x_min + (k + j) / 2)
-            k = j
-        else:
-            k += 1
-    edges = [-1e9] + gutters + [1e9]
 
-    # assign each char to a column; rows that straddle a gutter (centred titles) stay whole
-    def col_of(x):
-        return sum(1 for g in gutters if x >= g)
-
-    assign = {}
+    # rows by baseline; a row made of ONE long run of text (footer, centred title, copyright block) can sit
+    # across a gutter, so it must not be allowed to fill the gutter in the density histogram
     grows: list[list] = []
     for c in sorted(chars, key=lambda c: c[3]):
         if grows and abs(c[3] - grows[-1][0][3]) <= 0.5 * size:
             grows[-1].append(c)
         else:
             grows.append([c])
-    for r in grows:
+
+    def runs(r):
+        xs = sorted((c[1], c[2]) for c in r if not c[0].isspace())
+        out, cur = [], list(xs[0]) if xs else None
+        for a_, b_ in xs[1:]:
+            if a_ - cur[1] > min_gap:
+                out.append(cur)
+                cur = [a_, b_]
+            else:
+                cur[1] = max(cur[1], b_)
+        if cur:
+            out.append(cur)
+        return out
+
+    wide_rows = set()
+    for i, r in enumerate(grows):
+        rn = runs(r)
+        if len(rn) == 1:
+            width, centre = rn[0][1] - rn[0][0], (rn[0][0] + rn[0][1]) / 2
+            mid_x = (x_min + x_max) / 2
+            if width > 0.6 * (x_max - x_min) or abs(centre - mid_x) < 0.12 * (x_max - x_min):
+                wide_rows.add(i)          # one long run, or a single centred line: can't be a column row
+
+    dens = [0] * nb
+    for i, r in enumerate(grows):
+        if i in wide_rows:
+            continue
+        for c in r:
+            if c[0].isspace():
+                continue
+            for k in range(int(c[1] - x_min), int(c[2] - x_min) + 1):
+                dens[k] += 1
+    lim = max(1, int(0.08 * max(dens)))
+    gutters, k = [], 0
+    if columns != "1":
+        while k < nb:
+            if dens[k] <= lim:
+                j = k
+                while j < nb and dens[j] <= lim:
+                    j += 1
+                if j - k >= min_gap and k > 0 and j < nb:
+                    gutters.append(x_min + (k + j) / 2)
+                k = j
+            else:
+                k += 1
+        if columns == "2" and not gutters:
+            # the user says two columns: take the emptiest stretch around the middle of the text
+            lo, hi = int(0.3 * nb), int(0.7 * nb)
+            w = max(6, int(1.5 * size))
+            best = min(range(lo, max(lo + 1, hi - w)), key=lambda k: sum(dens[k:k + w]), default=None)
+            if best is not None:
+                gutters = [x_min + best + w / 2]
+        if columns == "2" and len(gutters) > 1:
+            mid = x_min + nb / 2
+            gutters = [min(gutters, key=lambda g: abs(g - mid))]
+
+    # assign each char to a column; rows that straddle a gutter (centred titles, footers) stay whole.
+    # Whole-page rows above the columns come first, those below them (copyright block) come last.
+    def col_of(x):
+        return sum(1 for g in gutters if x >= g)
+
+    assign = {}
+    straddlers = []
+    for i, r in enumerate(grows):
         r_cols = {col_of((c[1] + c[2]) / 2) for c in r}
         straddle = len(r_cols) > 1 and any(
             abs((c[1] + c[2]) / 2 - g) <= min_gap / 2 for g in gutters for c in r)
         lead = col_of(min(c[1] for c in r))
         for c in r:
             assign[id(c)] = lead if straddle else col_of((c[1] + c[2]) / 2)
+        if straddle and gutters:
+            straddlers.append((i, r))
+    if straddlers:
+        col_ys = [c[3] for r_i, r in enumerate(grows) if r_i not in {i for i, _ in straddlers} for c in r]
+        if col_ys:
+            top, bot = min(col_ys), max(col_ys)
+            for _, r in straddlers:
+                y = statistics.median(c[3] for c in r)
+                if y < top:
+                    for c in r:
+                        assign[id(c)] = -1
+                elif y > bot:
+                    for c in r:
+                        assign[id(c)] = len(gutters) + 1
 
     result: list[Line] = []
-    for ci in range(len(gutters) + 1):
+    for ci in sorted(set(assign.values())):
         col = [c for c in chars if assign[id(c)] == ci]
         col.sort(key=lambda c: (c[3], c[1]))
         rows: list[list] = []
@@ -164,7 +219,7 @@ def _is_sheet_music(path: Path) -> bool:
 
 
 def convert_pdf(path: str | Path, selections: Optional[list[dict]] = None, ocr: str = "auto",
-                notes: Optional[list] = None, layout: str = "auto") -> str:
+                notes: Optional[list] = None, layout: str = "auto", columns: str = "auto") -> str:
     """selections: [{"page": 0, "rect": [x0,y0,x1,y1]}, ...]; None = whole document.
     Also handles image files (png/jpg/tiff…), which PyMuPDF opens as one-page documents.
     ocr: 'auto' (OCR only where there is no text layer), 'force', or 'off'."""
@@ -187,12 +242,12 @@ def convert_pdf(path: str | Path, selections: Optional[list[dict]] = None, ocr: 
             for s in selections:
                 page = doc[s["page"]]
                 r = fitz.Rect(s["rect"]) * page.derotation_matrix
-                ls, u = _page_lines(page, r, ocr)
+                ls, u = _page_lines(page, r, ocr, columns)
                 lines += ls
                 used |= u
         else:
             for page in doc:
-                ls, u = _page_lines(page, None, ocr)
+                ls, u = _page_lines(page, None, ocr, columns)
                 lines += ls
                 used |= u
         if not lines:
@@ -246,12 +301,12 @@ def _textutil(path: Path) -> str:
 
 
 def convert_file(path: str | Path, selections: Optional[list[dict]] = None, ocr: str = "auto",
-                 notes: Optional[list] = None, layout: str = "auto") -> str:
+                 notes: Optional[list] = None, layout: str = "auto", columns: str = "auto") -> str:
     """notes: pass a list to receive review items (OCR auto-fixes / suggestions)."""
     p = Path(path)
     ext = p.suffix.lower()
     if ext == ".pdf" or ext in IMAGE_EXTS:
-        return convert_pdf(p, selections, ocr, notes, layout)
+        return convert_pdf(p, selections, ocr, notes, layout, columns)
     if ext == ".docx":
         return text_to_chordpro(_docx_text(p))
     if ext in TEXTUTIL_EXTS:

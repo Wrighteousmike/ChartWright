@@ -19,6 +19,8 @@ def main(argv=None) -> int:
                     help="text recognition for scans: auto (only if no text layer), force, off")
     cv.add_argument("--layout", choices=["auto", "chart", "sheet"], default="auto",
                     help="auto-detect (default), 'chart' = chord chart, 'sheet' = digital sheet music / lead sheet")
+    cv.add_argument("--columns", choices=["auto", "1", "2"], default="auto",
+                    help="page columns: auto-detect (default), or say 1 / 2 if detection gets it wrong")
     cv.add_argument("--rect", help="selection box x0,y0,x1,y1 in PDF points")
     sv = sub.add_parser("serve", help="start the drag-a-box web app (default)")
     sv.add_argument("--port", type=int, default=8791)
@@ -31,7 +33,7 @@ def main(argv=None) -> int:
         if args.rect:
             sel = [{"page": args.page - 1, "rect": [float(v) for v in args.rect.split(",")]}]
         notes: list = []
-        text = convert_file(args.file, sel, args.ocr, notes, args.layout)
+        text = convert_file(args.file, sel, args.ocr, notes, args.layout, args.columns)
         for n in notes:
             what = (f"{n['frm']} -> {n['to']}" if n['to'] else f"{n['frm']}  ({n['why']}; try: {', '.join(n['suggestions']) or '-'})" if n.get('why') else f"{n['frm']}  (suggest: {', '.join(n['suggestions']) or '-'})")
             print(f"[review:{n['kind']}] line {(n['line'] or 0) + 1}: {what}", file=sys.stderr)
