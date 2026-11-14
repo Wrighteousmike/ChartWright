@@ -19,5 +19,5 @@ exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="ChartWright", console
 coll = COLLECT(exe, a.binaries, a.datas, name="ChartWright")
 if sys.platform == "darwin":
     app = BUNDLE(coll, name="ChartWright.app", icon=icon, bundle_identifier="com.chartwright.app",
-                 info_plist={"LSUIElement": True, "CFBundleName": "ChartWright", "CFBundleShortVersionString": "1.0.0",
+                 info_plist={"LSUIElement": True, "CFBundleName": "ChartWright", "CFBundleShortVersionString": "1.0.2",
                              "NSHighResolutionCapable": True})

@@ -47,6 +47,21 @@
   #chart select { font:inherit; padding:5px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--ink); }
   #pages { padding:14px; background:var(--bg); display:flex; flex-direction:column; align-items:center; gap:14px; max-height:calc(100vh - 250px); overflow:auto; }
   #pages img { width:100%; max-width:640px; height:auto; background:#fff; box-shadow:0 1px 6px rgba(0,0,0,.25); }
+  #shift { padding:0; }
+  #shift .hintbar { display:flex; gap:10px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); font-size:13px; color:var(--muted); flex-wrap:wrap; }
+  #shiftbody { padding:10px 12px 24px; max-height:calc(100vh - 290px); overflow:auto; font:14px/1.2 ui-monospace, Menlo, monospace; }
+  .sl { position:relative; margin:2px 0 8px; }
+  .sl .lane { position:relative; height:24px; }
+  .sl .lyr { white-space:pre; padding-top:2px; border-top:1px dashed transparent; min-height:1.2em; }
+  .sl.drag .lyr { border-top-color:var(--line); }
+  .sl .chip { position:absolute; top:1px; padding:1px 6px; border-radius:11px; background:var(--accent); color:#fff; font:600 12.5px/18px ui-monospace, Menlo, monospace;
+              cursor:grab; user-select:none; touch-action:none; outline:none; white-space:nowrap; }
+  .sl .chip:focus-visible, .sl .chip.sel { box-shadow:0 0 0 2px var(--panel), 0 0 0 4px var(--accent); }
+  .sl .chip.moving { cursor:grabbing; opacity:.85; z-index:3; }
+  .sl .mark { position:absolute; top:0; bottom:0; width:2px; background:var(--accent); opacity:.6; display:none; pointer-events:none; }
+  .sl .tick { position:absolute; top:22px; width:0; height:0; }
+  .sp-plain { white-space:pre; color:var(--muted); min-height:1.2em; }
+  .sp-gap { height:8px; }
   .hint { color:var(--muted); font-size:13px; padding:0 14px 10px; }
 </style>
 </head>
@@ -94,8 +109,16 @@
       <button id="copy" disabled>Copy</button>
       <button id="save" disabled>Save .cho</button>
     </div>
-    <div class="tabs"><button id="tabText" class="on">ChordPro text</button><button id="tabChart">Chord chart preview</button></div>
+    <div class="tabs"><button id="tabText" class="on">ChordPro text</button><button id="tabShift">Shift chords</button><button id="tabChart">Chord chart preview</button></div>
     <div id="msg">Nothing loaded.</div>
+    <div id="shift" hidden>
+      <div class="hintbar">
+        <span>Drag a chord to where it belongs, or click it and use <b>←</b> <b>→</b> (hold <b>Shift</b> to jump a word). The text is only changed when you drop.</span>
+        <span class="sp" style="flex:1"></span>
+        <button id="shundo" disabled>Undo move</button>
+      </div>
+      <div id="shiftbody" tabindex="-1"></div>
+    </div>
     <div id="chart" hidden>
       <div class="bar">
         <label>Key <select id="ckey"><option value="">Original</option></select></label>
@@ -112,6 +135,7 @@
     <div id="review" hidden></div>
   </section>
 </main>
+<script src="/static/shift.js"></script>
 <script>
 const $ = id => document.getElementById(id);
 let doc = null, page = 0, ZOOM = 2, boxes = [];   // boxes: {page, rect:[x0,y0,x1,y1] in PDF points}
@@ -140,7 +164,7 @@ function showPage() {
   $('img').onload = drawBoxes;
 }
 
-function setOut(t) { showReview([]); $('out').value = t; $('copy').disabled = $('save').disabled = !t; if (typeof tab !== 'undefined' && tab === 'chart') preview(); }
+function setOut(t) { showReview([]); $('out').value = t; $('copy').disabled = $('save').disabled = !t; if (typeof tab !== 'undefined') { if (tab === 'chart') preview(); else if (tab === 'shift') renderShift(); } }
 function refresh() {
   $('clear').disabled = $('undo').disabled = !boxes.length;
   $('convert').textContent = boxes.length ? `Convert ${boxes.length} selection${boxes.length > 1 ? 's' : ''}` : 'Convert';
@@ -213,9 +237,11 @@ const chartOpts = () => ({ text: $('out').value, key: $('ckey').value, capo: +$(
                           size: $('csize').value, title: (doc?.name || '').replace(/\.[^.]+$/, '') });
 function setTab(t) {
   tab = t;
-  $('tabText').classList.toggle('on', t === 'text'); $('tabChart').classList.toggle('on', t === 'chart');
-  $('chart').hidden = t !== 'chart'; $('out').hidden = t !== 'text';
-  if (t === 'chart') { $('review').hidden = true; preview(); } else { $('review').hidden = !$('review').children.length; }
+  $('tabText').classList.toggle('on', t === 'text'); $('tabChart').classList.toggle('on', t === 'chart'); $('tabShift').classList.toggle('on', t === 'shift');
+  $('chart').hidden = t !== 'chart'; $('out').hidden = t !== 'text'; $('shift').hidden = t !== 'shift';
+  if (t === 'chart') { $('review').hidden = true; preview(); }
+  else if (t === 'shift') { $('review').hidden = true; shUndo = []; renderShift(); }
+  else { $('review').hidden = !$('review').children.length; }
 }
 async function preview() {
   const o = chartOpts(), my = ++pvSeq;
@@ -237,7 +263,7 @@ async function preview() {
 const schedulePreview = () => { clearTimeout(pvTimer); pvTimer = setTimeout(() => tab === 'chart' && preview(), 250); };
 ['ckey', 'ccapo', 'ccols', 'csize'].forEach(id => $(id).onchange = preview);
 $('out').addEventListener('input', schedulePreview);
-$('tabText').onclick = () => setTab('text'); $('tabChart').onclick = () => setTab('chart');
+$('tabText').onclick = () => setTab('text'); $('tabChart').onclick = () => setTab('chart'); $('tabShift').onclick = () => setTab('shift');
 $('pdf').onclick = async () => {
   const o = chartOpts();
   const r = await fetch('/api/pdf', { method: 'POST', body: JSON.stringify(o) });
@@ -246,6 +272,78 @@ $('pdf').onclick = async () => {
   a.download = (o.title || 'chord chart') + (o.key ? ' [' + o.key + (o.capo ? ' capo ' + o.capo : '') + ']' : '') + '.pdf'; a.click();
   msg('Chord chart PDF saved.');
 };
+
+// ---- chord shift mode: drag chords over the lyrics; the text changes only when a chord is dropped
+const CS = window.ChordShift;
+let shUndo = [], shSel = null;           // shSel = {li, ci}
+function charWidth() {
+  const s = document.createElement('span'); s.style.cssText = 'position:absolute;visibility:hidden;white-space:pre;font:14px ui-monospace,Menlo,monospace';
+  s.textContent = 'M'.repeat(40); $('shiftbody').appendChild(s); const w = s.getBoundingClientRect().width / 40; s.remove(); return w;
+}
+function renderShift() {
+  const body = $('shiftbody'), lines = $('out').value.split('\n'); body.innerHTML = '';
+  const cw = charWidth();
+  lines.forEach((raw, li) => {
+    if (!/\[[^\]]*\]/.test(raw) || /^\s*\{/.test(raw)) {
+      const d = document.createElement('div'); d.className = raw.trim() ? 'sp-plain' : 'sp-gap'; d.textContent = raw; body.appendChild(d); return;
+    }
+    const L = CS.parseLine(raw), box = document.createElement('div'); box.className = 'sl';
+    const lane = document.createElement('div'); lane.className = 'lane';
+    const lyr = document.createElement('div'); lyr.className = 'lyr'; lyr.textContent = L.text || ' ';
+    const mark = document.createElement('div'); mark.className = 'mark'; lane.appendChild(mark);
+    box.append(lane, lyr); body.appendChild(box);
+    const chips = L.chords.map((c, ci) => {
+      const el = document.createElement('div'); el.className = 'chip'; el.textContent = c.name; el.tabIndex = 0;
+      el.title = 'Drag, or ← → (Shift = word)';
+      if (shSel && shSel.li === li && shSel.ci === ci) el.classList.add('sel');
+      lane.appendChild(el); return el;
+    });
+    const layout = () => {            // chips may not overlap each other visually; the real position is unchanged
+      let edge = -1e9;
+      L.chords.map((c, ci) => ci).sort((a, b) => L.chords[a].pos - L.chords[b].pos || a - b).forEach(ci => {
+        const x = Math.max(L.chords[ci].pos * cw, edge + 3); chips[ci].style.left = x + 'px'; edge = x + chips[ci].offsetWidth;
+      });
+    };
+    layout();
+    const commit = (ci, pos) => {
+      const before = $('out').value;
+      if (!CS.moveChord(L, ci, pos)) return layout();
+      shUndo.push(before); if (shUndo.length > 200) shUndo.shift(); $('shundo').disabled = false;
+      lines[li] = CS.serializeLine(L); $('out').value = lines.join('\n');
+      $('out').dispatchEvent(new Event('input')); shSel = { li, ci }; renderShift();
+      const again = $('shiftbody').querySelectorAll('.sl')[[...body.children].indexOf(box)]; (again && again.querySelectorAll('.chip')[ci] || {}).focus?.();
+    };
+    chips.forEach((el, ci) => {
+      el.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+        e.preventDefault(); const d = e.key === 'ArrowRight' ? 1 : -1, c = L.chords[ci];
+        commit(ci, e.shiftKey ? CS.wordStep(L.text, c.pos, d) : c.pos + d);
+      });
+      el.addEventListener('pointerdown', e => {
+        e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch (_) {} el.classList.add('moving'); box.classList.add('drag');
+        shSel = { li, ci }; document.querySelectorAll('#shiftbody .chip.sel').forEach(x => x.classList.remove('sel')); el.classList.add('sel');
+        const grab = e.clientX - el.getBoundingClientRect().left; let pos = L.chords[ci].pos;
+        const at = x => Math.max(0, Math.min(L.text.length, Math.round((x - grab - lyr.getBoundingClientRect().left) / cw)));
+        const move = ev => { pos = at(ev.clientX); el.style.left = (pos * cw) + 'px'; mark.style.display = 'block'; mark.style.left = (pos * cw) + 'px'; };
+        const up = ev => {
+          el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up);
+          el.classList.remove('moving'); box.classList.remove('drag'); mark.style.display = 'none'; commit(ci, pos);
+        };
+        el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+      });
+    });
+  });
+}
+function shiftUndo() {
+  if (!shUndo.length) return;
+  $('out').value = shUndo.pop(); $('shundo').disabled = !shUndo.length;
+  $('out').dispatchEvent(new Event('input')); renderShift();
+}
+$('shundo').onclick = shiftUndo;
+document.addEventListener('keydown', e => {
+  if (tab === 'shift' && (e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); shiftUndo(); }
+});
+window.addEventListener('resize', () => { if (tab === 'shift') renderShift(); });
 
 // ---- OCR review list: auto-fixes (undo) and dictionary suggestions (apply)
 function lineRange(ta, n) {

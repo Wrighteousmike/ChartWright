@@ -118,6 +118,13 @@ install, no network, nothing leaves the machine.
   proofread the text box. **Very low-resolution, heavily blurred or noisy scans (≈100 dpi, tilted, speckled) can still fail**: the engine merges
   the chord row into the lyric row above it before any chord logic runs. Re-scan at 200–300 dpi if you can. Cleaner scans do better; use ~200–300 dpi, upright, good contrast.
 
+## Shift chords (fine-tune chord positions)
+
+The **Shift chords** tab shows each line with its chords as chips above the lyrics. Drag a chip to the letter it belongs
+over, or click it and use the left/right arrow keys (hold Shift to jump a whole word). Nothing in the text changes until you
+drop; **Undo move** (or Ctrl/Cmd+Z) steps back. Lines without chords, directives and your wording are never touched, and the
+chart preview follows every move. Logic: `chartwright/static/shift.js`; test: `tests/test_shift.py` (needs Node).
+
 ## Chord chart preview and PDF export
 
 Next to the ChordPro text there is a **Chord chart preview** tab (works on converted text, or on anything you paste or edit).

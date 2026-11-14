@@ -53,6 +53,10 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if u.path in ("/", "/index.html"):
                 return self._send(200, (STATIC / "index.html").read_bytes(), "text/html; charset=utf-8")
+            if u.path.startswith("/static/") and u.path.endswith(".js"):
+                f = (STATIC / Path(u.path).name)
+                if f.is_file():
+                    return self._send(200, f.read_bytes(), "text/javascript; charset=utf-8")
             if u.path == "/api/ping":
                 LAST_PING[0] = time.time()
                 return self._json({"ok": True})
